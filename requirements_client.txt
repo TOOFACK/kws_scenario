@@ -1,0 +1,7 @@
+# Минимальный набор для клиента (RPi). Без torch/sentence-transformers.
+vosk
+sounddevice
+webrtcvad
+scipy
+numpy
+requests

@@ -1,0 +1,15 @@
+# server
+fastapi
+uvicorn[standard]
+python-multipart
+vosk
+numpy
+sentence-transformers
+torch
+# опциональный backend — устанавливается при ASR_BACKEND=gigaam
+gigaam
+
+# client (RPi)
+sounddevice
+webrtcvad
+requests

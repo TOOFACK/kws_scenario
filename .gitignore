@@ -1,0 +1,23 @@
+# модели (качаются через download_models.sh / rpi_quickstart.sh)
+models/
+*.zip
+
+# логи
+logs/
+
+# python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.pytest_cache/
+*.egg-info/
+
+# venv (создаётся rpi_quickstart.sh)
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
