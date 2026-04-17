@@ -10,8 +10,8 @@
 #   5) запускает client.py
 #
 # Переменные окружения (можно задать заранее):
-#   VOICE_SERVER_URL  — адрес сервера, по умолчанию http://127.0.0.1:8001/voice_command
 #   INPUT_DEVICE      — индекс устройства (если уже знаешь)
+#   WAKE_WORD         — фраза-триггер, по умолчанию "салют"
 #
 set -euo pipefail
 
@@ -60,15 +60,15 @@ for i, d in enumerate(sd.query_devices()):
     read -rp "введи индекс устройства (Enter = default): " INPUT_DEVICE
 fi
 
-# ---- 5) сервер ----
-: "${VOICE_SERVER_URL:=http://127.0.0.1:8001/voice_command}"
-say "server: $VOICE_SERVER_URL"
+# ---- 5) запуск ----
+: "${WAKE_WORD:=салют}"
 say "device: ${INPUT_DEVICE:-default}"
+say "wake word: ${WAKE_WORD}"
 say "логи пишутся в $HERE/logs/client.log"
 say "запускаю клиент. Ctrl+C для выхода."
 echo
 
-# Запуск из родительской директории, чтобы работал `python -m streaming_asr.client`
+# Запуск из родительской директории, чтобы работал `python -m kws_scenario.client`
 cd ..
-INPUT_DEVICE="$INPUT_DEVICE" VOICE_SERVER_URL="$VOICE_SERVER_URL" \
-    python -u -m streaming_asr.client
+INPUT_DEVICE="$INPUT_DEVICE" WAKE_WORD="$WAKE_WORD" \
+    python -u -m kws_scenario.client

@@ -6,7 +6,7 @@ POST /voice_command  — multipart WAV/MP3 любого sample-rate.
 
 ASR-бэкенд выбирается env var'ом `ASR_BACKEND=vosk|gigaam` (default vosk).
 
-Логи: streaming_asr/logs/server.log (ротация 5MB × 5) + stdout.
+Логи: kws_scenario/logs/server.log (ротация 5MB × 5) + stdout.
 """
 import json
 import os
@@ -17,8 +17,8 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from select_scenario.compare_scenarios import ScenarioComparator
-from streaming_asr._logging import setup_logger
-from streaming_asr.backends import get_backend
+from kws_scenario._logging import setup_logger
+from kws_scenario.backends import get_backend
 
 HERE = Path(__file__).parent
 SCENARIOS_PATH = HERE / "scenarios.json"

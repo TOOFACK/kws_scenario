@@ -1,16 +1,15 @@
-# streaming_asr
+# kws_scenario
 
-Голосовая активация для умного дома:
-маленький Vosk на Raspberry Pi ловит wake-word, webrtcvad отрезает паузы,
-WAV с командой улетает на сервер, где большой ASR (Vosk big или GigaAM)
-распознаёт текст и SentenceTransformer матчит ближайший сценарий.
+Первый этап интеграции для умного дома:
+маленький Vosk на Raspberry Pi непрерывно слушает микрофон,
+ловит wake-word и пишет в лог момент распознавания триггер-фразы.
 
 ## Структура
 
 ```
-streaming_asr/
-├── server.py                  FastAPI: /voice_command, выбирает ASR backend
-├── client.py                  mic + wake-word + VAD + POST
+kws_scenario/
+├── server.py                  серверная часть (пока не используется в первом этапе)
+├── client.py                  mic + wake-word + логирование trigger phrase
 ├── _logging.py                общий логгер (stdout + файл с ротацией)
 ├── backends/
 │   ├── __init__.py            фабрика ASR-бэкендов (ASR_BACKEND env)
@@ -27,22 +26,13 @@ streaming_asr/
 
 ## Архитектура
 
-```
-RPi (клиент)                              сервер
-────────────                              ──────
+```text
+RPi (клиент)
+────────────
 микрофон 16kHz/mono, 30мс чанки
   │
   ├── маленькая Vosk: ищет wake-word в partial
-  │       partial содержит "салют" → CAPTURE
-  │
-  ├── CAPTURE:
-  │       webrtcvad режет паузы,
-  │       silence > 1с или max > 10с → закрыть
-  │       POST wav ────────────────────────→ ASR (Vosk big / GigaAM)
-  │                                          ↓
-  │                                          SentenceTransformer
-  │                                          cosine-sim со scenarios.json
-  │       {text, scenario, score} ←──────────
+  │       partial содержит "салют" → LOG
   │
   └── вернулись в IDLE
 ```
@@ -55,39 +45,18 @@ RPi (клиент)                              сервер
 Пример `client.log`:
 ```
 2026-04-17 00:22:22  INFO   voice.client  [WAKE] triggered (partial) on 'салют'
-2026-04-17 00:22:24  INFO   voice.client  [capture] end by silence (1860 ms)
-2026-04-17 00:22:24  INFO   voice.client  [SERVER] 268 ms | text='выключи свет' | scenario='Выключи свет' | score=1.000
-```
-
-`server.log`:
-```
-2026-04-17 00:22:24  INFO   voice.server  req | size=32.4KB | asr=218ms | match=50ms | total=268ms | text='выключи свет' | scenario='Выключи свет' | score=1.000
+2026-04-17 00:22:24  INFO   voice.client  [WAKE] trigger phrase detected (partial) on 'салют'
 ```
 
 Посмотреть live:
 ```bash
-tail -f streaming_asr/logs/client.log streaming_asr/logs/server.log
-```
-
-## Сервер
-
-```bash
-cd streaming_asr
-./download_models.sh                            # ~1.9 ГБ для Vosk
-pip install -r requirements.txt
-cd ..
-
-# Vosk (default)
-python -m streaming_asr.server                   # слушает 0.0.0.0:8001
-
-# GigaAM (качественнее и быстрее на CPU, первый запуск качает ~1 ГБ весов)
-ASR_BACKEND=gigaam python -m streaming_asr.server
+tail -f kws_scenario/logs/client.log
 ```
 
 ## Клиент — быстрый тест на RPi
 
 ```bash
-cd streaming_asr
+cd kws_scenario
 ./rpi_quickstart.sh
 ```
 
@@ -98,16 +67,11 @@ cd streaming_asr
 - покажет список микрофонов, попросит выбрать индекс
 - запустит клиент
 
-С сервером на другой машине:
-```bash
-VOICE_SERVER_URL=http://192.168.1.50:8001/voice_command ./rpi_quickstart.sh
-```
-
 Ручной запуск (если RPi/десктоп уже настроен):
 ```bash
-cd ..  # важно: из родительской директории, чтобы работал `-m streaming_asr.client`
-INPUT_DEVICE=4 WAKE_WORD=салют VOICE_SERVER_URL=http://192.168.1.50:8001/voice_command \
-    python -m streaming_asr.client
+cd ..  # важно: из родительской директории, чтобы работал `-m kws_scenario.client`
+INPUT_DEVICE=4 WAKE_WORD=салют \
+    python -m kws_scenario.client
 ```
 
 ## Переменные окружения
@@ -120,28 +84,19 @@ INPUT_DEVICE=4 WAKE_WORD=салют VOICE_SERVER_URL=http://192.168.1.50:8001/vo
 | `VOSK_SMALL_MODEL`  | `./models/vosk-model-small-ru-0.22` — клиент      |
 | `VOSK_CLIENT_MODEL` | = `VOSK_SMALL_MODEL` (переопределить на big для ПК) |
 | `WAKE_WORD`         | `джарвис` (в сессии использовали `салют`)         |
-| `VOICE_SERVER_URL`  | `http://127.0.0.1:8001/voice_command`             |
+| `WAKE_COOLDOWN_MS`  | `1500`                                            |
 | `INPUT_DEVICE`      | default (иначе индекс из `python -c "import sounddevice as sd; print(sd.query_devices())"`) |
 | `VOICE_LOG_DIR`     | `./logs`                                          |
-| `DEBUG_PARTIALS`    | `1` — партиалы в IDLE/CAPTURE, `0` — выкл         |
+| `DEBUG_PARTIALS`    | `1` — партиалы в IDLE, `0` — выкл                 |
 
 ## Настройки в `client.py`
 
 - `WAKE_WORD` — слово, срабатывает как подстрока в partial recognizer'а.
   Short & distinct лучше всего («салют», «робот», «компьютер»). «джарвис»
   не работает — OOV в русском словаре.
-- `SILENCE_END_MS` — сколько тишины = конец команды (1000 мс).
-- `MAX_COMMAND_MS` — максимум записи после wake (10 с).
-- `POST_WAKE_IGNORE_MS` — игнорируем «речь» первые N мс (хвост wake-слова).
-- `VAD_AGGRESSIVENESS` — 0..3, как жёстко резать паузы.
+- `WAKE_COOLDOWN_MS` — защита от повторных логов сразу после одной и той же wake-фразы.
 
 ## Известные ограничения
 
-- **Wake без паузы.** Если «салют» произнесён посреди длинной фразы,
-  CAPTURE начнётся сразу после — в запись попадёт только хвост фразы,
-  не отдельная команда. Лучше делать явную паузу перед wake-word.
-- **Low-score false matches.** SentenceTransformer всегда возвращает
-  ближайший сценарий. При мусорном тексте это бывает похоже на ложное
-  срабатывание. Можно добавить порог `score < 0.75 → None` на сервере.
 - **Wake-word OOV.** Если слово отсутствует в словаре Vosk (например
   «джарвис»), маленький recognizer его не распознает.
